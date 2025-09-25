@@ -1,5 +1,4 @@
 using Avalonia;
-using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
@@ -12,8 +11,8 @@ namespace fhnw_compgr;
 public partial class App : Application
 {
 
-    private int WIDTH = 400;
-    private int HEIGHT = 400;
+    private readonly int WIDTH = 400;
+    private readonly int HEIGHT = 400;
 
 
     public override void Initialize()
@@ -48,43 +47,40 @@ public partial class App : Application
         unsafe
         {
             using var fb = bitmap.Lock();
-            byte* ptr = (byte*)fb.Address;
-            int stride = fb.RowBytes;
+            uint* fstPxl = (uint*)fb.Address;
+
+            // colors
+            Vector3 left = SRGBToLinear(new(1f, 0f, 0f));   // Red
+            Vector3 right = SRGBToLinear(new(0f, 1f, 0f));  // Green
 
             for (int x = 0; x < WIDTH; x++)
             {
+                // Interpolation factor
                 float tx = x / (float)(WIDTH - 1);
-
-                // colors
-                Vector3 left = new(1f, 0f, 0f);   // Red
-                Vector3 right = new(0f, 1f, 0f);  // Green
-
-                // Convert to linear RGB
-                left = SRGBToLinear(left);
-                right = SRGBToLinear(right);
-
-                // Bilinear interpolation in linear space
                 Vector3 linear = Vector3.Lerp(left, right, tx);
 
-                // Convert back to sRGB
                 Vector3 srgb = LinearToSRGB(linear);
-
-                byte r = (byte)(Math.Clamp(srgb.X, 0, 1) * 255);
-                byte g = (byte)(Math.Clamp(srgb.Y, 0, 1) * 255);
-                byte b = (byte)(Math.Clamp(srgb.Z, 0, 1) * 255);
-                byte a = 255;
-
-                int offset = stride + x * 4;
-                ptr[offset + 0] = b; // Blue
-                ptr[offset + 1] = g; // Green
-                ptr[offset + 2] = r; // Red
-                ptr[offset + 3] = a; // Alpha
+                for (int y = 0; y < HEIGHT; y++)
+                {
+                    int offset = y * (fb.RowBytes / 4) + x;
+                    fstPxl[offset] = Vector3ToPixel(srgb);
+                }
             }
         }
 
         image.Source = bitmap;
         window.Show();
         base.OnFrameworkInitializationCompleted();
+    }
+
+
+    // Returns a BGRA Pixel
+    static uint Vector3ToPixel(Vector3 v, byte alpha = 255)
+    {
+        byte r = (byte)(Math.Clamp(v.X, 0, 1) * 255);
+        byte g = (byte)(Math.Clamp(v.Y, 0, 1) * 255);
+        byte b = (byte)(Math.Clamp(v.Z, 0, 1) * 255);
+        return (uint)(b | (g << 8) | (r << 16) | (alpha << 24));
     }
 
     static Vector3 SRGBToLinear(Vector3 srgb)

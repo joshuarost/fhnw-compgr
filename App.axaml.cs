@@ -5,6 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using System;
 using System.Numerics;
+using Avalonia.Media;
 
 namespace fhnw_compgr;
 
@@ -26,7 +27,52 @@ public partial class App : Application
         Lab1();
     }
 
-    private void Lab1()
+    private void Lab2()
+    {
+        Vector3 eye = new(0, 0, -4f);
+        Vector3 lookAt = new(0, 0, 6);
+        const float POV = 36;
+
+
+
+
+        Sphere[] scene = new Sphere[] {
+    new(new(-1001f, 0, 0), 1000, new(1, 1, 0, 0)),
+    new Sphere(new(1001f, 0, 0), 1000, new(1, 0, 1, 0)),
+    new Sphere(new(0, 0, 1001), 1000, new(1, 1, 0, 0)),
+    new Sphere(new(0, -1001, 0), 1000, new(1, 1, 0, 0)),
+    new Sphere(new(0, 1001, 0), 1000, new(1, 1, 0, 0)),
+    new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new(1, 1, 1, 0)),
+    new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new(1, 0, 1, 1)),
+    };
+    }
+
+    static EyeRay CreateEyeRay(Vector3 eye, Vector3 lookAt, float pov, Vector2 pixel)
+    {
+        var f = lookAt - eye;
+        Vector3 up = new(0, 1, 0);
+        var r = Vector3.Cross(f, up);
+        var u = Vector3.Cross(f, r);
+
+        float beta = (float)Math.Tan(pov / 2 * pixel.Y);
+        float w = (float)Math.Tan(pov / 2 * pixel.X);
+
+        var d = Vector3.Normalize(f) + beta * Vector3.Normalize(u) + w * Vector3.Normalize(r);
+
+        return new EyeRay(eye, d);
+    }
+
+    static Vector3 FindClosestHitPoint(Sphere[] scene, Vector3 o, Vector3 d)
+    {
+        return new(0, 0, 0);
+    }
+
+    static Color ComputeColor(Sphere[] scene, Vector3 o, Vector3 d)
+    {
+        return new(1, 1, 1, 1);
+    }
+
+    void Lab1()
     {
         var window = new Window
         {
@@ -70,9 +116,7 @@ public partial class App : Application
 
         image.Source = bitmap;
         window.Show();
-        base.OnFrameworkInitializationCompleted();
     }
-
 
     // Returns a BGRA Pixel
     static uint Vector3ToPixel(Vector3 v, byte alpha = 255)
@@ -111,5 +155,34 @@ public partial class App : Application
                 srgb[i] = 1.055f * MathF.Pow(r, 1 / 2.4f) - 0.055f;
         }
         return srgb;
+    }
+}
+
+
+
+
+class EyeRay
+{
+    public Vector3 o;
+    public Vector3 d;
+
+    public EyeRay(Vector3 o, Vector3 d)
+    {
+        this.o = o;
+        this.d = d;
+    }
+}
+
+class Sphere
+{
+    public Vector3 center;
+    public float r;
+    public Color color;
+
+    public Sphere(Vector3 center, float r, Color color)
+    {
+        this.center = center;
+        this.r = r;
+        this.color = color;
     }
 }

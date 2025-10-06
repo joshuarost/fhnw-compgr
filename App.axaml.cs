@@ -41,7 +41,7 @@ public partial class App : Application
             using var fb = bitmap.Lock();
             uint* fstPxl = (uint*)fb.Address;
 
-            Lab1(fb, fstPxl);
+            // Lab1(fb, fstPxl);
             Lab2(fb, fstPxl);
 
             image.Source = bitmap;
@@ -99,10 +99,10 @@ public partial class App : Application
         return new EyeRay(eye, d);
     }
 
-    static HitPoint FindClosestHitPoint(Sphere[] scene, Vector3 o, Vector3 d)
+    static HitPoint? FindClosestHitPoint(Sphere[] scene, Vector3 o, Vector3 d)
     {
         float closestT = float.MaxValue;
-        HitPoint closestPoint = new(null, null);
+        HitPoint? closestPoint = null;
 
         foreach (var sphere in scene)
         {
@@ -130,19 +130,50 @@ public partial class App : Application
         return closestPoint;
     }
 
-    static Vector3 ComputeColor(Sphere[] scene, Vector3 o, Vector3 d)
+    static Vector3 ComputeColor(Sphere[] scene, Vector3 o, Vector3 d, int depth = 0)
     {
+        if (depth > 5)
+        {
+            return Vector3.Zero; // terminate recursion
+        }
         var hitpoint = FindClosestHitPoint(scene, o, d);
-        if (hitpoint.sphere == null)
+        if (hitpoint == null)
             return Vector3.Zero; // Background color (black)
+
+        Random rand = new();
+        const float p = 0.2f;
+        if ((float)rand.NextDouble() < p)
+            return Vector3.Zero; // terminate
+
+        var random = SampleRandomDirection(hitpoint.Value.Normal);
         // return the color of the sphere at the hitpoint
-        return hitpoint.sphere.Value.diffuse;
+        var emission = hitpoint.Value.sphere.emission;
+        random = Vector3.Normalize(random);
+        var a = emission + 2 * MathF.PI * (random * hitpoint.Value.Normal);
+        var brdf = BRDF(Vector3.Normalize(d), random, hitpoint.Value.sphere.diffuse);
+        return a * brdf * ComputeColor(scene, hitpoint.Value.position, random);
     }
 
-    // static Vector3 BRDF(Vector3 inDir, Vector3 outDir)
-    // {
-    //     return Vector3.Dot(inDir, outDir);
-    // }
+    static Vector3 SampleRandomDirection(Vector3 n)
+    {
+        // random number between -1 and 1
+        Random rand = new();
+        float x = (float)(rand.NextDouble() * 2 - 1);
+        float y = (float)(rand.NextDouble() * 2 - 1);
+        float z = (float)(rand.NextDouble() * 2 - 1);
+        Vector3 r = new(x, y, z);
+        if (r.Length() > 1) // outside of unit sphere
+            return SampleRandomDirection(n); // try again
+        if (Vector3.Dot(r, n) < 0) // below the surface
+            r = -r; // flip to the upper hemisphere
+        return Vector3.Normalize(r);
+    }
+
+    static Vector3 BRDF(Vector3 i, Vector3 o, Vector3 diffuse)
+    {
+        const float INV_PI = 1.0f / (float)Math.PI;
+        return diffuse * INV_PI;
+    }
 
 
     unsafe void Lab1(ILockedFramebuffer? fb, uint* fstPxl)
@@ -238,9 +269,9 @@ struct Sphere(Vector3 center, float r, Vector3 diffuse, Vector3 emission)
     public Vector3 emission = emission;
 }
 
-struct HitPoint(Vector3? position, Sphere? sphere)
+struct HitPoint(Vector3 position, Sphere sphere)
 {
-    public Vector3? position = position;
-    public Sphere? sphere = sphere;
-    public readonly bool Hit => sphere != null;
+    public Vector3 position = position;
+    public Sphere sphere = sphere;
+    public readonly Vector3 Normal => Vector3.Normalize(position - sphere.center);
 }

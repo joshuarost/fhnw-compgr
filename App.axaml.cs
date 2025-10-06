@@ -5,16 +5,13 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using System;
 using System.Numerics;
-using Avalonia.Media;
 
 namespace fhnw_compgr;
 
 public partial class App : Application
 {
-
     private readonly int WIDTH = 800;
     private readonly int HEIGHT = 800;
-
 
     public override void Initialize()
     {
@@ -24,17 +21,11 @@ public partial class App : Application
     public override void OnFrameworkInitializationCompleted()
     {
         base.OnFrameworkInitializationCompleted();
-        // Lab1();
-        Lab2();
-    }
-
-    private void Lab2()
-    {
         var window = new Window
         {
             Width = WIDTH,
             Height = HEIGHT,
-            Title = "LAB 2 - Cornell Box"
+            Title = "Computer Graphics"
         };
 
         var image = new Image();
@@ -45,7 +36,21 @@ public partial class App : Application
             new Avalonia.Vector(96, 96), // Fully qualified to avoid ambiguity
             PixelFormat.Bgra8888
         );
+        unsafe
+        {
+            using var fb = bitmap.Lock();
+            uint* fstPxl = (uint*)fb.Address;
 
+            Lab1(fb, fstPxl);
+            Lab2(fb, fstPxl);
+
+            image.Source = bitmap;
+            window.Show();
+        }
+    }
+
+    private unsafe void Lab2(ILockedFramebuffer? fb, uint* fstPxl)
+    {
         Vector3 eye = new(0, 0, -4f);
         Vector3 lookAt = new(0, 0, 6);
         const float POV = 36;
@@ -54,37 +59,27 @@ public partial class App : Application
         // const float POV = 110;
 
         Sphere[] scene = [
-            new Sphere(new(-1001f, 0, 0), 1000, Color.FromRgb(255, 0, 0)), // Red
-            new Sphere(new(1001f, 0, 0), 1000, Color.FromRgb(0, 0, 255)),  // Blue
-            new Sphere(new(0, 0, 1001), 1000, Color.FromRgb(128, 128, 128)),    // Gray
-            new Sphere(new(0, -1001, 0), 1000, Color.FromRgb(128, 128, 128)),   // Gray
-            new Sphere(new(0, 1001, 0), 1000, Color.FromRgb(255, 255, 255)),    // White
-            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, Color.FromRgb(255, 255, 0)), // Yellow
-            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, Color.FromRgb(0, 255, 255)),   // Light Cyan
+            new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), new Vector3(0, 0, 0)), // Red
+            new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), new Vector3(0, 0, 0)),  // Blue
+            new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),    // Gray
+            new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),   // Gray
+            new Sphere(new(0, 1001, 0), 1000, new Vector3(1, 1, 1), new Vector3(1, 1, 1)),    // White
+            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), new Vector3(0, 0, 0)), // Yellow
+            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), new Vector3(0, 0, 0)),   // Light Cyan
         ];
 
-        unsafe
+        for (int x = 0; x < WIDTH; x++)
         {
-            using var fb = bitmap.Lock();
-            uint* fstPxl = (uint*)fb.Address;
-
-            for (int x = 0; x < WIDTH; x++)
+            for (int y = 0; y < HEIGHT; y++)
             {
-                for (int y = 0; y < HEIGHT; y++)
-                {
-                    float ndcX = -(2f * (x + 0.5f) / WIDTH - 1f) * (WIDTH / (float)HEIGHT);
-                    float ndcY = 2f * (y + 0.5f) / HEIGHT - 1f;
-                    var ray = CreateEyeRay(eye, lookAt, POV, new(ndcX, ndcY));
-                    var color = ComputeColor(scene, ray.o, ray.d);
-                    int offset = y * (fb.RowBytes / 4) + x;
-                    fstPxl[offset] = Vector3ToPixel(new(color.R / 255f, color.G / 255f, color.B / 255f));
-                }
+                float ndcX = -(2f * (x + 0.5f) / WIDTH - 1f) * (WIDTH / (float)HEIGHT);
+                float ndcY = 2f * (y + 0.5f) / HEIGHT - 1f;
+                var ray = CreateEyeRay(eye, lookAt, POV, new(ndcX, ndcY));
+                var color = ComputeColor(scene, ray.o, ray.d);
+                int offset = y * (fb!.RowBytes / 4) + x;
+                fstPxl[offset] = Vector3ToPixel(color);
             }
         }
-
-        image.Source = bitmap;
-        window.Show();
-
     }
 
     static EyeRay CreateEyeRay(Vector3 eye, Vector3 lookAt, float pov, Vector2 pixel)
@@ -135,65 +130,63 @@ public partial class App : Application
         return closestPoint;
     }
 
-    static Color ComputeColor(Sphere[] scene, Vector3 o, Vector3 d)
+    static Vector3 ComputeColor(Sphere[] scene, Vector3 o, Vector3 d)
     {
         var hitpoint = FindClosestHitPoint(scene, o, d);
-        if (!hitpoint.Hit)
-            return Colors.Black;
+        if (hitpoint.sphere == null)
+            return Vector3.Zero; // Background color (black)
         // return the color of the sphere at the hitpoint
-        return hitpoint.sphere?.color ?? Colors.Black;
+        return hitpoint.sphere.Value.diffuse;
     }
 
+    // static Vector3 BRDF(Vector3 inDir, Vector3 outDir)
+    // {
+    //     return Vector3.Dot(inDir, outDir);
+    // }
 
-    void Lab1()
+
+    unsafe void Lab1(ILockedFramebuffer? fb, uint* fstPxl)
     {
-        var window = new Window
+        // colors
+        Vector3 left = new(1f, 0f, 0f);   // Red
+        Vector3 right = new(0f, 1f, 0f);  // Green
+
+        for (int x = 0; x < WIDTH; x++)
         {
-            Width = WIDTH,
-            Height = HEIGHT,
-            Title = "LAB 1"
-        };
+            // Interpolation factor
+            float tx = x / (float)(WIDTH - 1);
+            Vector3 linear = Vector3.Lerp(left, right, tx);
 
-        var image = new Image();
-        window.Content = image;
-
-        var bitmap = new WriteableBitmap(
-            new PixelSize(WIDTH, HEIGHT),
-            new Avalonia.Vector(96, 96), // Fully qualified to avoid ambiguity
-            PixelFormat.Bgra8888
-        );
-
-        unsafe
-        {
-            using var fb = bitmap.Lock();
-            uint* fstPxl = (uint*)fb.Address;
-
-            // colors
-            Vector3 left = SRGBToLinear(new(1f, 0f, 0f));   // Red
-            Vector3 right = SRGBToLinear(new(0f, 1f, 0f));  // Green
-
-            for (int x = 0; x < WIDTH; x++)
+            for (int y = 0; y < HEIGHT; y++)
             {
-                // Interpolation factor
-                float tx = x / (float)(WIDTH - 1);
-                Vector3 linear = Vector3.Lerp(left, right, tx);
-
-                Vector3 srgb = LinearToSRGB(linear);
-                for (int y = 0; y < HEIGHT; y++)
-                {
-                    int offset = y * (fb.RowBytes / 4) + x;
-                    fstPxl[offset] = Vector3ToPixel(srgb);
-                }
+                // var linear = Experiment(x, y);
+                // var linear = Experiment2(x, y);
+                int offset = y * (fb.RowBytes / 4) + x;
+                fstPxl[offset] = Vector3ToPixel(linear);
             }
         }
+    }
 
-        image.Source = bitmap;
-        window.Show();
+    Vector3 Experiment(float x, float y)
+    {
+        var fx = MathF.Sin(x / 20 + MathF.Cos(y * 0.03f)) * 0.4f + 0.4f;
+        var fy = MathF.Cos(y / 20 + MathF.Sin(x * 0.03f)) * 0.4f + 0.4f;
+        var f = MathF.Tan((fx + fy) * MathF.PI / 2) * 0.4f + 0.4f;
+        return SRGBToLinear(new Vector3(fx, fy, f));
+    }
+
+    Vector3 Experiment2(float x, float y)
+    {
+        var fx = MathF.Sin(x / 20 + MathF.Cos(y * 0.03f)) * 0.4f + 0.4f;
+        var fy = MathF.Cos(y / 20 + MathF.Sin(x * 0.03f)) * 0.4f + 0.4f;
+        var f = MathF.Tan((fx + fy) * MathF.PI / 2) * 0.4f + 0.4f;
+        return SRGBToLinear(new Vector3(fx, fy, f));
     }
 
     // Returns a BGRA Pixel
     static uint Vector3ToPixel(Vector3 v, byte alpha = 255)
     {
+        v = LinearToSRGB(v);
         byte r = (byte)(Math.Clamp(v.X, 0, 1) * 255);
         byte g = (byte)(Math.Clamp(v.Y, 0, 1) * 255);
         byte b = (byte)(Math.Clamp(v.Z, 0, 1) * 255);
@@ -237,11 +230,12 @@ struct EyeRay(Vector3 o, Vector3 d)
     public Vector3 d = d;
 }
 
-struct Sphere(Vector3 center, float r, Color color)
+struct Sphere(Vector3 center, float r, Vector3 diffuse, Vector3 emission)
 {
     public Vector3 center = center;
     public float r = r;
-    public Color color = color;
+    public Vector3 diffuse = diffuse;
+    public Vector3 emission = emission;
 }
 
 struct HitPoint(Vector3? position, Sphere? sphere)

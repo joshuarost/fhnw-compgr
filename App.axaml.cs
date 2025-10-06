@@ -10,8 +10,8 @@ namespace fhnw_compgr;
 
 public partial class App : Application
 {
-    private readonly int WIDTH = 800;
-    private readonly int HEIGHT = 800;
+    private readonly int WIDTH = 600;
+    private readonly int HEIGHT = 600;
     static readonly Random rand = new();
 
 
@@ -63,11 +63,11 @@ public partial class App : Application
             new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),    // Gray
             new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),   // Gray
             new Sphere(new(0, 1001, 0), 1000, new Vector3(1, 1, 1), 2 * new Vector3(1, 1, 1)),    // White
-            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), new Vector3(0, 0, 0)), // Yellow
-            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), new Vector3(0, 0, 0)),   // Light Cyan
+            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), new Vector3(0, 0, 0), 1f), // Yellow
+            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), new Vector3(0, 0, 0), 1f),   // Light Cyan
         ];
 
-        const int SAMPLES_PER_FRAME = 20;
+        const int SAMPLES_PER_FRAME = 400;
 
         for (int x = 0; x < WIDTH; x++)
         {
@@ -143,7 +143,7 @@ public partial class App : Application
         if (depth > 5)
             return Vector3.Zero; // terminate recursion
         var hitpoint = FindClosestHitPoint(scene, o, d);
-        if (hitpoint == null)
+        if (!hitpoint.HasValue)
             return Vector3.Zero; // Background color (black)
 
         var n = hitpoint.Value.Normal;
@@ -154,13 +154,11 @@ public partial class App : Application
         if ((float)rand.NextDouble() < p)
             return emission; // terminate
 
-        var r = SampleRandomDirection(hitpoint.Value.Normal);
-
+        var r = SampleRandomDirection(n);
         Vector3 Li = ComputeColor(scene, hitpoint.Value.position + n * 0.001f, r, depth + 1);
-
-        var fr = BRDF(Vector3.Normalize(d), r, diffuse);
-        return emission + (2f * MathF.PI) * Vector3.Dot(r, n) * fr * Li;
-        // return the color of the sphere at the hitpoint
+        var fr = BRDF(-d, r, n, hitpoint.Value.sphere);
+        var pdf = 1f / (2f * MathF.PI);
+        return emission + fr * (Vector3.Dot(r, n) / pdf) * Li;
     }
 
     static Vector3 SampleRandomDirection(Vector3 n)
@@ -177,10 +175,17 @@ public partial class App : Application
         return Vector3.Normalize(r);
     }
 
-    static Vector3 BRDF(Vector3 i, Vector3 o, Vector3 diffuse)
+    static Vector3 BRDF(Vector3 wi, Vector3 wo, Vector3 n, Sphere sphere)
     {
-        const float INV_PI = 1.0f / (float)Math.PI;
-        return diffuse * INV_PI;
+        var diffused = sphere.diffuse * (1.0f / MathF.PI);
+        if (sphere.specular > 0)
+        {
+            var r = Vector3.Reflect(-wi, n);
+            r = Vector3.Normalize(r);
+            if (Vector3.Dot(wo, r) > 1f - 0.01f) // Almost aligned
+                return diffused + (Vector3.One * 10f * sphere.specular);
+        }
+        return diffused;
     }
 
 
@@ -269,12 +274,13 @@ struct EyeRay(Vector3 o, Vector3 d)
     public Vector3 d = d;
 }
 
-struct Sphere(Vector3 center, float r, Vector3 diffuse, Vector3 emission)
+struct Sphere(Vector3 center, float r, Vector3 diffuse, Vector3 emission, float specular = 0)
 {
     public Vector3 center = center;
     public float r = r;
     public Vector3 diffuse = diffuse;
     public Vector3 emission = emission;
+    public float specular = specular;
 }
 
 struct HitPoint(Vector3 position, Sphere sphere)

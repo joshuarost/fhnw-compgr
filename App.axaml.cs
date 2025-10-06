@@ -56,30 +56,36 @@ public partial class App : Application
         Vector3 eye = new(0, 0, -4f);
         Vector3 lookAt = new(0, 0, 6);
         const float POV = 36;
-        // Vector3 eye = new(-0.9f, -0.5f, 0.9f);
-        // Vector3 lookAt = new(0, 0, 0);
-        // const float POV = 110;
 
         Sphere[] scene = [
             new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), new Vector3(0, 0, 0)), // Red
             new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), new Vector3(0, 0, 0)),  // Blue
             new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),    // Gray
             new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),   // Gray
-            new Sphere(new(0, 1001, 0), 1000, new Vector3(1, 1, 1), new Vector3(1, 1, 1)),    // White
+            new Sphere(new(0, 1001, 0), 1000, new Vector3(1, 1, 1), 2 * new Vector3(1, 1, 1)),    // White
             new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), new Vector3(0, 0, 0)), // Yellow
             new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), new Vector3(0, 0, 0)),   // Light Cyan
         ];
+
+        const int SAMPLES_PER_FRAME = 20;
 
         for (int x = 0; x < WIDTH; x++)
         {
             for (int y = 0; y < HEIGHT; y++)
             {
-                float ndcX = -(2f * (x + 0.5f) / WIDTH - 1f) * (WIDTH / (float)HEIGHT);
-                float ndcY = 2f * (y + 0.5f) / HEIGHT - 1f;
-                var ray = CreateEyeRay(eye, lookAt, POV, new(ndcX, ndcY));
-                var color = ComputeColor(scene, ray.o, ray.d);
+                Vector3 pixelColor = Vector3.Zero;
+
+                for (int s = 0; s < SAMPLES_PER_FRAME; s++)
+                {
+                    float ndcX = -(2f * (x + 0.5f) / WIDTH - 1f) * (WIDTH / (float)HEIGHT);
+                    float ndcY = 2f * (y + 0.5f) / HEIGHT - 1f;
+                    var ray = CreateEyeRay(eye, lookAt, POV, new(ndcX, ndcY));
+                    pixelColor += ComputeColor(scene, ray.o, ray.d);
+                }
+                pixelColor /= SAMPLES_PER_FRAME;
+
                 int offset = y * (fb!.RowBytes / 4) + x;
-                fstPxl[offset] = Vector3ToPixel(color);
+                fstPxl[offset] = Vector3ToPixel(pixelColor);
             }
         }
     }

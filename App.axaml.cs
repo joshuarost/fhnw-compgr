@@ -12,6 +12,8 @@ public partial class App : Application
 {
     private readonly int WIDTH = 800;
     private readonly int HEIGHT = 800;
+    static readonly Random rand = new();
+
 
     public override void Initialize()
     {
@@ -133,31 +135,31 @@ public partial class App : Application
     static Vector3 ComputeColor(Sphere[] scene, Vector3 o, Vector3 d, int depth = 0)
     {
         if (depth > 5)
-        {
             return Vector3.Zero; // terminate recursion
-        }
         var hitpoint = FindClosestHitPoint(scene, o, d);
         if (hitpoint == null)
             return Vector3.Zero; // Background color (black)
 
-        Random rand = new();
+        var n = hitpoint.Value.Normal;
+        var emission = hitpoint.Value.sphere.emission;
+        var diffuse = hitpoint.Value.sphere.diffuse;
+
         const float p = 0.2f;
         if ((float)rand.NextDouble() < p)
-            return Vector3.Zero; // terminate
+            return emission; // terminate
 
-        var random = SampleRandomDirection(hitpoint.Value.Normal);
+        var r = SampleRandomDirection(hitpoint.Value.Normal);
+
+        Vector3 Li = ComputeColor(scene, hitpoint.Value.position + n * 0.001f, r, depth + 1);
+
+        var fr = BRDF(Vector3.Normalize(d), r, diffuse);
+        return emission + (2f * MathF.PI) * Vector3.Dot(r, n) * fr * Li;
         // return the color of the sphere at the hitpoint
-        var emission = hitpoint.Value.sphere.emission;
-        random = Vector3.Normalize(random);
-        var a = emission + 2 * MathF.PI * (random * hitpoint.Value.Normal);
-        var brdf = BRDF(Vector3.Normalize(d), random, hitpoint.Value.sphere.diffuse);
-        return a * brdf * ComputeColor(scene, hitpoint.Value.position, random);
     }
 
     static Vector3 SampleRandomDirection(Vector3 n)
     {
         // random number between -1 and 1
-        Random rand = new();
         float x = (float)(rand.NextDouble() * 2 - 1);
         float y = (float)(rand.NextDouble() * 2 - 1);
         float z = (float)(rand.NextDouble() * 2 - 1);

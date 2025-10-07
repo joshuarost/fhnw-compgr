@@ -67,7 +67,7 @@ public partial class App : Application
             new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), new Vector3(0, 0, 0), 1f),   // Light Cyan
         ];
 
-        const int SAMPLES_PER_FRAME = 400;
+        const int SAMPLES_PER_FRAME = 100;
 
         for (int x = 0; x < WIDTH; x++)
         {
@@ -146,7 +146,7 @@ public partial class App : Application
         if (!hitpoint.HasValue)
             return Vector3.Zero; // Background color (black)
 
-        var n = hitpoint.Value.Normal;
+        var n = Vector3.Normalize(hitpoint.Value.Normal);
         var emission = hitpoint.Value.sphere.emission;
         var diffuse = hitpoint.Value.sphere.diffuse;
 
@@ -156,7 +156,7 @@ public partial class App : Application
 
         var r = SampleRandomDirection(n);
         Vector3 Li = ComputeColor(scene, hitpoint.Value.position + n * 0.001f, r, depth + 1);
-        var fr = BRDF(-d, r, n, hitpoint.Value.sphere);
+        var fr = BRDF(d, r, n, hitpoint.Value.sphere);
         var pdf = 1f / (2f * MathF.PI);
         return emission + fr * (Vector3.Dot(r, n) / pdf) * Li;
     }
@@ -175,14 +175,13 @@ public partial class App : Application
         return Vector3.Normalize(r);
     }
 
-    static Vector3 BRDF(Vector3 wi, Vector3 wo, Vector3 n, Sphere sphere)
+    static Vector3 BRDF(Vector3 d, Vector3 wo, Vector3 n, Sphere sphere)
     {
         var diffused = sphere.diffuse * (1.0f / MathF.PI);
         if (sphere.specular > 0)
         {
-            var r = Vector3.Reflect(-wi, n);
-            r = Vector3.Normalize(r);
-            if (Vector3.Dot(wo, r) > 1f - 0.01f) // Almost aligned
+            var r = Vector3.Reflect(Vector3.Normalize(d), Vector3.Normalize(n));
+            if (Vector3.Dot(Vector3.Normalize(wo), r) > 1f - 0.01f) // Almost aligned
                 return diffused + (Vector3.One * 10f * sphere.specular);
         }
         return diffused;

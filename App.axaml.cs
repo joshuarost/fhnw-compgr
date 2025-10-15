@@ -17,6 +17,7 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.MainWindow = new LabOne();
+            // desktop.MainWindow = new LabTwo();
         }
         base.OnFrameworkInitializationCompleted();
     }

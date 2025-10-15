@@ -7,14 +7,14 @@ using utils;
 using System.Numerics;
 using Avalonia.Controls.Shapes;
 
-namespace fhnw_compgr;
+namespace fhnw_compgr.labs;
 
-public partial class MainWindow : Window
+public partial class LabTwo : Window
 {
     private readonly DispatcherTimer timer = new();
     private float angle = 0;
 
-    public MainWindow()
+    public LabTwo()
     {
         InitializeComponent();
         timer.Interval = TimeSpan.FromMilliseconds(16); // ~60 FPS

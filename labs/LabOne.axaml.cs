@@ -1,32 +1,24 @@
 using Avalonia;
-using Avalonia.Markup.Xaml;
 using Avalonia.Controls;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using System;
 using System.Numerics;
-using Avalonia.Controls.ApplicationLifetimes;
 
 namespace fhnw_compgr.labs;
 
 public partial class LabOne : Window
 {
     static readonly Random rand = new();
-    private readonly int WIDTH = 600;
-    private readonly int HEIGHT = 600;
+    private readonly int WIDTH;
+    private readonly int HEIGHT;
 
     public LabOne()
     {
         InitializeComponent();
-        var window = new Window
-        {
-            Width = WIDTH,
-            Height = HEIGHT,
-            Title = "Computer Graphics"
-        };
+        WIDTH = (int)Width;
+        HEIGHT = (int)Height;
 
-        var image = new Image();
-        window.Content = image;
         var bitmap = new WriteableBitmap(
                     new PixelSize(WIDTH, HEIGHT),
                     new Avalonia.Vector(96, 96), // Fully qualified to avoid ambiguity
@@ -36,13 +28,9 @@ public partial class LabOne : Window
         {
             using var fb = bitmap.Lock();
             uint* fstPxl = (uint*)fb.Address;
-
-            // Lab1(fb, fstPxl);
             Lab2(fb, fstPxl);
-
-            image.Source = bitmap;
-            window.Show();
         }
+        MainImage.Source = bitmap;
     }
     private unsafe void Lab2(ILockedFramebuffer? fb, uint* fstPxl)
     {
@@ -50,17 +38,21 @@ public partial class LabOne : Window
         Vector3 lookAt = new(0, 0, 6);
         const float POV = 36;
 
+        // string path = Path.Combine(Environment.CurrentDirectory, "Assets", "tile.jpg");
+        var tileTexture = new Bitmap(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/chess.png")));
+
         Sphere[] scene = [
-            new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), new Vector3(0, 0, 0)), // Red
-            new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), new Vector3(0, 0, 0)),  // Blue
-            new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),    // Gray
-            new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), new Vector3(0, 0, 0)),   // Gray
-            new Sphere(new(0, 1001, 0), 1000, new Vector3(1, 1, 1), 2 * new Vector3(1, 1, 1)),    // White
-            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), new Vector3(0, 0, 0), 1f), // Yellow
-            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), new Vector3(0, 0, 0), 1f),   // Light Cyan
+            new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), Vector3.Zero), // Red
+            new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), Vector3.Zero),  // Blue
+            new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),    // Gray
+            new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),   // Gray
+            new Sphere(new(0, 1001, 0), 1000, Vector3.One, 2 * Vector3.One),    // White
+            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), Vector3.Zero, 1f), // Yellow
+            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), Vector3.Zero, 1f),   // Light Cyan
+            new Sphere(new(0f, -0.7f, -0.2f), 0.2f, Vector3.Zero, Vector3.Zero, 0, tileTexture) // texture
         ];
 
-        const int SAMPLES_PER_FRAME = 10;
+        const int SAMPLES_PER_FRAME = 20;
 
         for (int x = 0; x < WIDTH; x++)
         {
@@ -135,23 +127,30 @@ public partial class LabOne : Window
     {
         if (depth > 5)
             return Vector3.Zero; // terminate recursion
+
         var hitpoint = FindClosestHitPoint(scene, o, d);
         if (!hitpoint.HasValue)
             return Vector3.Zero; // Background color (black)
 
+        var sphere = hitpoint.Value.sphere;
         var n = Vector3.Normalize(hitpoint.Value.Normal);
-        var emission = hitpoint.Value.sphere.emission;
-        var diffuse = hitpoint.Value.sphere.diffuse;
+
+        if (sphere.texture != null)
+        {
+            var uv = SphericalProjection(hitpoint.Value.Normal);
+            var texture = GetTexture(sphere.texture, uv);
+            sphere.diffuse = texture;
+        }
 
         const float p = 0.2f;
         if ((float)rand.NextDouble() < p)
-            return emission; // terminate
+            return sphere.emission; // terminate
 
         var r = SampleRandomDirection(n);
         Vector3 Li = ComputeColor(scene, hitpoint.Value.position + n * 0.001f, r, depth + 1);
-        var fr = BRDF(d, r, n, hitpoint.Value.sphere);
+        var fr = BRDF(d, r, n, sphere);
         var pdf = 1f / (2f * MathF.PI);
-        return emission + fr * (Vector3.Dot(r, n) / pdf) * Li;
+        return sphere.emission + fr * (Vector3.Dot(r, n) / pdf) * Li;
     }
 
     static Vector3 SampleRandomDirection(Vector3 n)
@@ -178,6 +177,39 @@ public partial class LabOne : Window
                 return diffused + (Vector3.One * 10f * sphere.specular);
         }
         return diffused;
+    }
+
+    static Vector2 SphericalProjection(Vector3 n)
+    {
+        var s = MathF.Atan2(n.X, n.Z);
+        var t = MathF.Acos(n.Y);
+        return new Vector2(s, t);
+    }
+
+    unsafe static Vector3 GetTexture(Bitmap texture, Vector2 uv)
+    {
+        uv.X -= MathF.Floor(uv.X);
+        uv.Y -= MathF.Floor(uv.Y);
+
+        int w = (int)texture.Size.Width;
+        int h = (int)texture.Size.Height;
+
+        int x = (int)(uv.X * (w - 1));
+        int y = (int)((1f - uv.Y) * (h - 1));
+
+        byte[] buffer = new byte[4]; // Avalonia uses RGBA
+        fixed (byte* p = buffer)
+        {
+            var rect = new PixelRect(x, y, 1, 1);
+            int bufferSize = buffer.Length;   // 4
+            int stride = 4;                   // 1 pixel * 4 bytes
+            texture.CopyPixels(rect, (nint)p, bufferSize, stride);
+        }
+
+        float r = buffer[0] / 255f;
+        float g = buffer[1] / 255f;
+        float b = buffer[2] / 255f;
+        return SRGBToLinear(new Vector3(r, g, b));
     }
 
 
@@ -266,13 +298,14 @@ struct EyeRay(Vector3 o, Vector3 d)
     public Vector3 d = d;
 }
 
-struct Sphere(Vector3 center, float r, Vector3 diffuse, Vector3 emission, float specular = 0)
+struct Sphere(Vector3 center, float r, Vector3 diffuse, Vector3 emission, float specular = 0, Bitmap? texture = null)
 {
     public Vector3 center = center;
     public float r = r;
     public Vector3 diffuse = diffuse;
     public Vector3 emission = emission;
     public float specular = specular;
+    public Bitmap? texture = texture;
 }
 
 struct HitPoint(Vector3 position, Sphere sphere)

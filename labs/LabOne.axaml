@@ -5,7 +5,8 @@
         mc:Ignorable="d" d:DesignWidth="600" d:DesignHeight="600"
         x:Class="fhnw_compgr.labs.LabOne"
         Title="Lab One - Texture Mapping"
+        Width="600" Height="600"
         Name="LabOneWindow"
         >
-    <!-- <Image x:Name="MainImage" Stretch="Fill"/> -->
+    <Image x:Name="MainImage" Stretch="Fill"/>
 </Window>

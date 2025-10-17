@@ -4,14 +4,18 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using System;
 using System.Numerics;
+using System.Threading.Tasks;
 
 namespace fhnw_compgr.labs;
 
 public partial class LabOne : Window
 {
-    static readonly Random rand = new();
+    [ThreadStatic] static Random? threadRand;
+    static Random Rand => threadRand ??= new Random(Guid.NewGuid().GetHashCode());
+
     private readonly int WIDTH;
     private readonly int HEIGHT;
+    private readonly int SAMPLES_PER_FRAME = 20;
 
     public LabOne()
     {
@@ -24,37 +28,68 @@ public partial class LabOne : Window
                     new Avalonia.Vector(96, 96), // Fully qualified to avoid ambiguity
                     PixelFormat.Bgra8888
                 );
+
+        var cornell = CornellBox();
+        var custom = CustomScene();
+
         unsafe
         {
             using var fb = bitmap.Lock();
             uint* fstPxl = (uint*)fb.Address;
-            Lab2(fb, fstPxl);
+            Generate(custom, fb);
         }
         MainImage.Source = bitmap;
     }
-    private unsafe void Lab2(ILockedFramebuffer? fb, uint* fstPxl)
+
+    private static Scene CustomScene()
     {
         Vector3 eye = new(0, 0, -4f);
         Vector3 lookAt = new(0, 0, 6);
         const float POV = 36;
 
-        // string path = Path.Combine(Environment.CurrentDirectory, "Assets", "tile.jpg");
-        var tileTexture = new Bitmap(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/chess.png")));
+        var chess = new Bitmap(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/chess.png")));
 
-        Sphere[] scene = [
-            new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), Vector3.Zero), // Red
+        Sphere[] objects = [
+              new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), Vector3.Zero), // Red
             new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), Vector3.Zero),  // Blue
             new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),    // Gray
             new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),   // Gray
             new Sphere(new(0, 1001, 0), 1000, Vector3.One, 2 * Vector3.One),    // White
-            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), Vector3.Zero, 1f), // Yellow
-            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), Vector3.Zero, 1f),   // Light Cyan
-            new Sphere(new(0f, -0.7f, -0.2f), 0.2f, Vector3.Zero, Vector3.Zero, 0, tileTexture) // texture
+            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), Vector3.Zero, 0), // Yellow
+            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), Vector3.Zero, 0),   // Light Cyan
+            new Sphere(new(0f, -0.7f, -0.2f), 0.2f, Vector3.Zero, Vector3.Zero, 0, chess) // texture
         ];
+        return new Scene(objects, eye, lookAt, POV);
+    }
 
-        const int SAMPLES_PER_FRAME = 20;
+    private static Scene CornellBox()
+    {
+        Vector3 eye = new(0, 0, -4f);
+        Vector3 lookAt = new(0, 0, 6);
+        const float POV = 36;
 
-        for (int x = 0; x < WIDTH; x++)
+        Sphere[] objects = [
+              new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), Vector3.Zero), // Red
+            new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), Vector3.Zero),  // Blue
+            new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),    // Gray
+            new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),   // Gray
+            new Sphere(new(0, 1001, 0), 1000, Vector3.One, 2 * Vector3.One),    // White
+            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), Vector3.Zero, 0), // Yellow
+            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), Vector3.Zero, 0),   // Light Cyan
+            // new Sphere(new(0f, -0.7f, -0.2f), 0.2f, Vector3.Zero, Vector3.Zero, 0, chess) // texture
+        ];
+        return new Scene(objects, eye, lookAt, POV);
+    }
+
+    private unsafe void Generate(Scene scene, ILockedFramebuffer framebuffer)
+    {
+        uint* fstPxl = (uint*)framebuffer.Address;
+
+        var eye = scene.eye;
+        var lookAt = scene.lookAt;
+        var POV = scene.pov;
+
+        Parallel.For(0, WIDTH, x =>
         {
             for (int y = 0; y < HEIGHT; y++)
             {
@@ -65,14 +100,14 @@ public partial class LabOne : Window
                     float ndcX = -(2f * (x + 0.5f) / WIDTH - 1f) * (WIDTH / (float)HEIGHT);
                     float ndcY = 2f * (y + 0.5f) / HEIGHT - 1f;
                     var ray = CreateEyeRay(eye, lookAt, POV, new(ndcX, ndcY));
-                    pixelColor += ComputeColor(scene, ray.o, ray.d);
+                    pixelColor += ComputeColor(scene.objects, ray.o, ray.d);
                 }
                 pixelColor /= SAMPLES_PER_FRAME;
 
-                int offset = y * (fb!.RowBytes / 4) + x;
+                int offset = y * (framebuffer!.RowBytes / 4) + x;
                 fstPxl[offset] = Vector3ToPixel(pixelColor);
             }
-        }
+        });
     }
 
     static EyeRay CreateEyeRay(Vector3 eye, Vector3 lookAt, float pov, Vector2 pixel)
@@ -143,7 +178,7 @@ public partial class LabOne : Window
         }
 
         const float p = 0.2f;
-        if ((float)rand.NextDouble() < p)
+        if ((float)Rand.NextDouble() < p)
             return sphere.emission; // terminate
 
         var r = SampleRandomDirection(n);
@@ -156,9 +191,9 @@ public partial class LabOne : Window
     static Vector3 SampleRandomDirection(Vector3 n)
     {
         // random number between -1 and 1
-        float x = (float)(rand.NextDouble() * 2 - 1);
-        float y = (float)(rand.NextDouble() * 2 - 1);
-        float z = (float)(rand.NextDouble() * 2 - 1);
+        float x = (float)(Rand.NextDouble() * 2 - 1);
+        float y = (float)(Rand.NextDouble() * 2 - 1);
+        float z = (float)(Rand.NextDouble() * 2 - 1);
         Vector3 r = new(x, y, z);
         if (r.Length() > 1) // outside of unit sphere
             return SampleRandomDirection(n); // try again
@@ -181,8 +216,8 @@ public partial class LabOne : Window
 
     static Vector2 SphericalProjection(Vector3 n)
     {
-        var s = MathF.Atan2(n.X, n.Z);
-        var t = MathF.Acos(n.Y);
+        var s = 0.5f + MathF.Atan2(n.Z, n.X) / (2f * MathF.PI);
+        var t = 0.5f - MathF.Acos(n.Y) / MathF.PI;
         return new Vector2(s, t);
     }
 
@@ -290,6 +325,14 @@ public partial class LabOne : Window
         }
         return srgb;
     }
+}
+
+struct Scene(Sphere[] objects, Vector3 eye, Vector3 lookAt, float pov)
+{
+    public Sphere[] objects = objects;
+    public Vector3 eye = eye;
+    public Vector3 lookAt = lookAt;
+    public float pov = pov;
 }
 
 struct EyeRay(Vector3 o, Vector3 d)

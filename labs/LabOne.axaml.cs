@@ -15,7 +15,7 @@ public partial class LabOne : Window
 
     private readonly int WIDTH;
     private readonly int HEIGHT;
-    private readonly int SAMPLES_PER_FRAME = 20;
+    private readonly int SAMPLES_PER_FRAME = 1024;
 
     public LabOne()
     {
@@ -29,35 +29,33 @@ public partial class LabOne : Window
                     PixelFormat.Bgra8888
                 );
 
-        var cornell = CornellBox();
-        var custom = CustomScene();
-
         unsafe
         {
             using var fb = bitmap.Lock();
-            uint* fstPxl = (uint*)fb.Address;
-            Generate(custom, fb);
+            Generate(CustomScene(), fb); // Custom Scene
+            // Generate(CornellBox(), fb); // Cornell Box
+            // Lab1(fb); // Gradient
+            // Experiment(fb); // Experiment
         }
         MainImage.Source = bitmap;
     }
 
     private static Scene CustomScene()
     {
-        Vector3 eye = new(0, 0, -4f);
-        Vector3 lookAt = new(0, 0, 6);
-        const float POV = 36;
+        Vector3 eye = new(1, 1, -4f);
+        Vector3 lookAt = new(0, -1.5f, 6);
+        const float POV = 50;
 
-        var chess = new Bitmap(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/chess.png")));
+        var texture = new Bitmap(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/tile.jpg")));
 
         Sphere[] objects = [
-              new Sphere(new(-1001f, 0, 0), 1000, new Vector3(1, 0, 0), Vector3.Zero), // Red
-            new Sphere(new(1001f, 0, 0), 1000, new Vector3(0, 0, 1), Vector3.Zero),  // Blue
-            new Sphere(new(0, 0, 1001), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),    // Gray
-            new Sphere(new(0, -1001, 0), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),   // Gray
-            new Sphere(new(0, 1001, 0), 1000, Vector3.One, 2 * Vector3.One),    // White
-            new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), Vector3.Zero, 0), // Yellow
-            new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), Vector3.Zero, 0),   // Light Cyan
-            new Sphere(new(0f, -0.7f, -0.2f), 0.2f, Vector3.Zero, Vector3.Zero, 0, chess) // texture
+            new Sphere(new(0, 25, 0), 20, Vector3.One, 2 * Vector3.One),    // LIGHT
+            new Sphere(new(0, 0, 1021), 1000, new Vector3(0.5f, 0.5f, 0.5f), Vector3.Zero),
+            new Sphere(new(0, -1001, 0), 1000, new Vector3(0.8f, 0.8f, 0.8f), Vector3.Zero),
+            new Sphere(new(0.8f, 0.5f, 4f), 2f, new Vector3(0.83f, 0.21f, 0.65f), Vector3.Zero, 0.4f),
+            new Sphere(new(0.3f, -0.3f, 0.3f), 0.8f, Vector3.Zero, Vector3.Zero, 0, texture),
+            new Sphere(new(-0.6f, -0.6f, -0.6f), 0.4f, new Vector3(0.23f, 0.21f, 0.25f), Vector3.Zero, 0.9f),
+            new Sphere(new(0f, -0.8f, -0.6f), 0.2f, Vector3.Zero, Vector3.Zero, 1f),
         ];
         return new Scene(objects, eye, lookAt, POV);
     }
@@ -76,7 +74,6 @@ public partial class LabOne : Window
             new Sphere(new(0, 1001, 0), 1000, Vector3.One, 2 * Vector3.One),    // White
             new Sphere(new(-0.6f, -0.7f, -0.6f), 0.3f, new Vector3(1, 1, 0), Vector3.Zero, 0), // Yellow
             new Sphere(new(0.3f, -0.4f, 0.3f), 0.6f, new Vector3(0, 1, 1), Vector3.Zero, 0),   // Light Cyan
-            // new Sphere(new(0f, -0.7f, -0.2f), 0.2f, Vector3.Zero, Vector3.Zero, 0, chess) // texture
         ];
         return new Scene(objects, eye, lookAt, POV);
     }
@@ -181,6 +178,11 @@ public partial class LabOne : Window
         if ((float)Rand.NextDouble() < p)
             return sphere.emission; // terminate
 
+        if (sphere.specular >= 1f)
+        {
+            var reflected = Vector3.Reflect(d, n);
+            return sphere.emission + ComputeColor(scene, hitpoint.Value.position + n * 0.001f, reflected, depth + 1);
+        }
         var r = SampleRandomDirection(n);
         Vector3 Li = ComputeColor(scene, hitpoint.Value.position + n * 0.001f, r, depth + 1);
         var fr = BRDF(d, r, n, sphere);
@@ -221,6 +223,18 @@ public partial class LabOne : Window
         return new Vector2(s, t);
     }
 
+    static Vector2 PlanarProjection(Vector3 n, float scale = 1f)
+    {
+        // Simple planar projection on the XY plane
+        float u = n.X * scale % 1f;
+        float v = n.Y * scale % 1f;
+
+        if (u < 0) u += 1f;
+        if (v < 0) v += 1f;
+
+        return new Vector2(u, v);
+    }
+
     unsafe static Vector3 GetTexture(Bitmap texture, Vector2 uv)
     {
         uv.X -= MathF.Floor(uv.X);
@@ -248,8 +262,9 @@ public partial class LabOne : Window
     }
 
 
-    unsafe void Lab1(ILockedFramebuffer? fb, uint* fstPxl)
+    unsafe void Lab1(ILockedFramebuffer framebuffer)
     {
+        uint* fstPxl = (uint*)framebuffer.Address;
         // colors
         Vector3 left = new(1f, 0f, 0f);   // Red
         Vector3 right = new(0f, 1f, 0f);  // Green
@@ -262,28 +277,33 @@ public partial class LabOne : Window
 
             for (int y = 0; y < HEIGHT; y++)
             {
-                // var linear = Experiment(x, y);
-                // var linear = Experiment2(x, y);
-                int offset = y * (fb.RowBytes / 4) + x;
+                int offset = y * (framebuffer.RowBytes / 4) + x;
                 fstPxl[offset] = Vector3ToPixel(linear);
             }
         }
     }
 
-    Vector3 Experiment(float x, float y)
+    unsafe void Experiment(ILockedFramebuffer framebuffer)
     {
-        var fx = MathF.Sin(x / 20 + MathF.Cos(y * 0.03f)) * 0.4f + 0.4f;
-        var fy = MathF.Cos(y / 20 + MathF.Sin(x * 0.03f)) * 0.4f + 0.4f;
-        var f = MathF.Tan((fx + fy) * MathF.PI / 2) * 0.4f + 0.4f;
-        return SRGBToLinear(new Vector3(fx, fy, f));
-    }
+        uint* fstPxl = (uint*)framebuffer.Address;
+        // colors
+        Vector3 left = new(1f, 0f, 0f);   // Red
+        Vector3 right = new(0f, 1f, 0f);  // Green
 
-    Vector3 Experiment2(float x, float y)
-    {
-        var fx = MathF.Sin(x / 20 + MathF.Cos(y * 0.03f)) * 0.4f + 0.4f;
-        var fy = MathF.Cos(y / 20 + MathF.Sin(x * 0.03f)) * 0.4f + 0.4f;
-        var f = MathF.Tan((fx + fy) * MathF.PI / 2) * 0.4f + 0.4f;
-        return SRGBToLinear(new Vector3(fx, fy, f));
+        for (int x = 0; x < WIDTH; x++)
+        {
+            for (int y = 0; y < HEIGHT; y++)
+            {
+                var fx = MathF.Sin(x / 20 + MathF.Cos(y * 0.03f)) * 0.4f + 0.4f;
+                var fy = MathF.Cos(y / 20 + MathF.Sin(x * 0.03f)) * 0.4f + 0.4f;
+                var f = MathF.Tan((fx + fy) * MathF.PI / 2) * 0.4f + 0.4f;
+                var linear = SRGBToLinear(new Vector3(fx, fy, f));
+
+                int offset = y * (framebuffer.RowBytes / 4) + x;
+                fstPxl[offset] = Vector3ToPixel(linear);
+            }
+        }
+
     }
 
     // Returns a BGRA Pixel

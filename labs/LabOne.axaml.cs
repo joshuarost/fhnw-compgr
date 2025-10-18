@@ -158,25 +158,25 @@ public partial class LabOne : Window
     static Vector3 ComputeColor(Sphere[] scene, Vector3 o, Vector3 d, int depth = 0)
     {
         if (depth > 5)
-            return Vector3.Zero; // terminate recursion
+            return Vector3.Zero;
 
         var hitpoint = FindClosestHitPoint(scene, o, d);
         if (!hitpoint.HasValue)
-            return Vector3.Zero; // Background color (black)
+            return Vector3.Zero;
 
         var sphere = hitpoint.Value.sphere;
         var n = Vector3.Normalize(hitpoint.Value.Normal);
 
         if (sphere.texture != null)
         {
-            var uv = SphericalProjection(hitpoint.Value.Normal);
+            var uv = PlanarProjection(hitpoint.Value.Normal, scale: 0.4f);
             var texture = GetTexture(sphere.texture, uv);
             sphere.diffuse = texture;
         }
 
         const float p = 0.2f;
         if ((float)Rand.NextDouble() < p)
-            return sphere.emission; // terminate
+            return sphere.emission;
 
         if (sphere.specular >= 1f)
         {
@@ -225,13 +225,10 @@ public partial class LabOne : Window
 
     static Vector2 PlanarProjection(Vector3 n, float scale = 1f)
     {
-        // Simple planar projection on the XY plane
         float u = n.X * scale % 1f;
         float v = n.Y * scale % 1f;
-
         if (u < 0) u += 1f;
         if (v < 0) v += 1f;
-
         return new Vector2(u, v);
     }
 

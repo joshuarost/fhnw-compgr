@@ -6,7 +6,10 @@
         Width="600" Height="600"
         x:Class="fhnw_compgr.labs.LabTwo"
         Title="Realtime Rendering">
-    <Canvas x:Name="MainCanvas" Background="White"/>
+    <Canvas x:Name="MainCanvas" Background="White">
+        <Image x:Name="MainImage" Stretch="Fill" />
+        <TextBlock x:Name="DebugLabel" Foreground="Lime" Canvas.Left="10" Canvas.Top="10"/>
+    </Canvas>
 </Window>
 
 

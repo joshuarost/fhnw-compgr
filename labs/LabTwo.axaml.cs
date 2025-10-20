@@ -1,34 +1,60 @@
 using Avalonia.Controls;
-using Avalonia.Media;
 using Avalonia.Threading;
 using Avalonia;
 using System;
 using utils;
 using System.Numerics;
-using Avalonia.Controls.Shapes;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 
 namespace fhnw_compgr.labs;
 
 public partial class LabTwo : Window
 {
+    private readonly int WIDTH = 600, HEIGHT = 600;
     private readonly DispatcherTimer timer = new();
     private float angle = 0;
+    private readonly WriteableBitmap framebuffer;
 
     public LabTwo()
     {
         InitializeComponent();
+
+        framebuffer = new WriteableBitmap(
+            new PixelSize(WIDTH, HEIGHT),
+            new Avalonia.Vector(96, 96), // Fully qualified to avoid ambiguity
+            PixelFormat.Bgra8888
+        );
+
+        MainImage.Source = framebuffer;
+
         timer.Interval = TimeSpan.FromMilliseconds(16); // ~60 FPS
         timer.Tick += OnRenderFrame;
         timer.Start();
     }
 
-    private void OnRenderFrame(object? sender, EventArgs e)
+    private unsafe void OnRenderFrame(object? sender, EventArgs e)
     {
-        MainCanvas.Children.Clear();
-        RenderCube();
+        using var fb = framebuffer.Lock();
+        uint* pixels = (uint*)fb.Address;
+        int stride = fb.RowBytes / 4;
+
+        // Clear screen
+        for (int i = 0; i < HEIGHT * stride; i++)
+            pixels[i] = 0xFF000000; // black
+
+        RenderCube(pixels, stride);
+        MainImage.InvalidateVisual();
+        DebugLabel.Text = $"Angle: {angle:F2}";
     }
 
-    private void RenderCube()
+    private unsafe void SetPixel(uint* buffer, int x, int y, uint color, int stride)
+    {
+        if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
+        buffer[y * stride + x] = color;
+    }
+
+    private unsafe void RenderCube(uint* pixels, int stride)
     {
         angle += 0.02f; // Speed
         var MVP = CreateMVPMatrix(angle);
@@ -60,17 +86,36 @@ public partial class LabTwo : Window
             if (face.Z < 0)
                 return;
 
-            var polygon = new Polygon
+            for (int y = 0; y < HEIGHT; y++)
             {
-                Points = [new Point(p1.X, p1.Y), new Point(p2.X, p2.Y), new Point(p3.X, p3.Y)],
-                Stroke = Brushes.Black,
-                Fill = Brushes.Honeydew,
-                StrokeThickness = 1
-            };
-
-            MainCanvas.Children.Add(polygon);
+                for (int x = 0; x < WIDTH; x++)
+                {
+                    if (IsPointInTriangle(p1, p2, p3, new(x, y)))
+                    {
+                        SetPixel(pixels, x, y, 0xFFFF0000, stride); // BLACK
+                    }
+                }
+            }
         });
     }
+
+    private static Vector2 TriangleIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 p)
+    {
+        var ab = b - a;
+        var ac = c - a;
+
+        var inverse = 1 / (ab.X * ac.Y - ab.Y * ac.X);
+        var matrix = new Vector2(ac.Y - ac.X, ab.Y - ab.X);
+        p = new(p.X - a.X, p.Y - a.Y);
+        return inverse * matrix * p;
+    }
+
+    private static bool IsPointInTriangle(Vector2 a, Vector2 b, Vector2 c, Vector2 p)
+    {
+        var uv = TriangleIntersection(a, b, c, p);
+        return uv.X >= 0 && uv.Y >= 0 && (uv.X + uv.Y) < 1;
+    }
+
     private static Vertex Project(Vertex v)
     {
         return 1 / v.Position.W * v;
@@ -86,11 +131,11 @@ public partial class LabTwo : Window
 
     private Vector2 ConvertToPixels(Vector4 position)
     {
-        var wHalf = (float)MainCanvas.Bounds.Width / 2;
-        var hHalf = (float)MainCanvas.Bounds.Height / 2;
+        var wHalf = WIDTH / 2f;
+        var hHalf = HEIGHT / 2f;
         return new Vector2(
             position.X * wHalf + wHalf,
-            position.Y * wHalf + hHalf
+            position.Y * hHalf + hHalf
         );
     }
 

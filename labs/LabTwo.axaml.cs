@@ -15,6 +15,14 @@ public partial class LabTwo : Window
     private readonly DispatcherTimer timer = new();
     private float angle = 0;
     private readonly WriteableBitmap framebuffer;
+    private readonly Mesh cube = Mesh.CreateCube(
+            new Vector3(1, 0, 0),
+            new Vector3(0, 1, 1),
+            new Vector3(1, 0, 1),
+            new Vector3(1, 1, 0),
+            new Vector3(1, 1, 1),
+            new Vector3(0, 1, 1)
+        );
 
     public LabTwo()
     {
@@ -40,33 +48,18 @@ public partial class LabTwo : Window
         int stride = fb.RowBytes / 4;
 
         // Clear screen
-        for (int i = 0; i < HEIGHT * stride; i++)
-            pixels[i] = 0xFF000000; // black
+        Span<uint> span = new(pixels, HEIGHT * stride);
+        span.Fill(0xFF000000);
 
         RenderCube(pixels, stride);
         MainImage.InvalidateVisual();
         DebugLabel.Text = $"Angle: {angle:F2}";
     }
 
-    private unsafe void SetPixel(uint* buffer, int x, int y, uint color, int stride)
-    {
-        if (x < 0 || y < 0 || x >= WIDTH || y >= HEIGHT) return;
-        buffer[y * stride + x] = color;
-    }
-
     private unsafe void RenderCube(uint* pixels, int stride)
     {
         angle += 0.02f; // Speed
         var MVP = CreateMVPMatrix(angle);
-
-        var cube = Mesh.CreateCube(
-            Vector3.One,
-            Vector3.One,
-            Vector3.One,
-            Vector3.One,
-            Vector3.One,
-            Vector3.One
-        );
 
         cube.Tris.ForEach(tri =>
         {
@@ -86,33 +79,52 @@ public partial class LabTwo : Window
             if (face.Z < 0)
                 return;
 
-            for (int y = 0; y < HEIGHT; y++)
+            var (min, max) = BoundingBox(p1, p2, p3);
+            for (int y = (int)min.Y; y <= (int)max.Y; y++)
             {
-                for (int x = 0; x < WIDTH; x++)
+                for (int x = (int)min.X; x <= (int)max.X; x++)
                 {
-                    if (IsPointInTriangle(p1, p2, p3, new(x, y)))
-                    {
-                        SetPixel(pixels, x, y, 0xFFFF0000, stride); // BLACK
-                    }
+                    var uv = TriangleIntersection(p1, p2, p3, new Vector2(x, y));
+                    if (!IsPointInTriangle(uv, new Vector2(x, y)))
+                        continue;
+                    // Use barycentric weights to interpolate vertex colors: A*(1-u-v) + B*u + C*v
+                    var color = Vector3.Lerp(
+                        cube.Vertices[tri.A].Color,
+                        Vector3.One,
+                        uv.X);
+                    pixels[y * stride + x] = Color.Vector3ToPixel(color);
                 }
             }
         });
+    }
+
+    private static Vector3 VertexShader()
+    {
+        return Vector3.Zero;
+    }
+
+
+    private static (Vector2 x, Vector2 y) BoundingBox(Vector2 a, Vector2 b, Vector2 c)
+    {
+        var minX = MathF.Min(a.X, MathF.Min(b.X, c.X));
+        var minY = MathF.Min(a.Y, MathF.Min(b.Y, c.Y));
+        var maxX = MathF.Max(a.X, MathF.Max(b.X, c.X));
+        var maxY = MathF.Max(a.Y, MathF.Max(b.Y, c.Y));
+        return (new Vector2(minX, minY), new Vector2(maxX, maxY));
     }
 
     private static Vector2 TriangleIntersection(Vector2 a, Vector2 b, Vector2 c, Vector2 p)
     {
         var ab = b - a;
         var ac = c - a;
-
         var inverse = 1 / (ab.X * ac.Y - ab.Y * ac.X);
-        var matrix = new Vector2(ac.Y - ac.X, ab.Y - ab.X);
-        p = new(p.X - a.X, p.Y - a.Y);
-        return inverse * matrix * p;
+        var a1 = (p.X - a.X) * new Vector2(ac.Y, -ab.Y);
+        var b1 = (p.Y - a.Y) * new Vector2(-ac.X, ab.X);
+        return inverse * (a1 + b1);
     }
 
-    private static bool IsPointInTriangle(Vector2 a, Vector2 b, Vector2 c, Vector2 p)
+    private static bool IsPointInTriangle(Vector2 uv, Vector2 p)
     {
-        var uv = TriangleIntersection(a, b, c, p);
         return uv.X >= 0 && uv.Y >= 0 && (uv.X + uv.Y) < 1;
     }
 

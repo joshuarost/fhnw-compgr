@@ -6,6 +6,7 @@ using utils;
 using System.Numerics;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
+using System.Collections.Generic;
 
 namespace fhnw_compgr.labs;
 
@@ -15,6 +16,10 @@ public partial class LabTwo : Window
     private readonly DispatcherTimer timer = new();
     private float angle = 0;
     private readonly WriteableBitmap framebuffer;
+    private readonly Light light = new(
+        new Vector3(5, 5, -5),
+        new Vector3(1, 1, 1)
+    );
     private readonly Mesh cube = Mesh.CreateCube(
             new Vector3(1, 0, 0),
             new Vector3(0, 1, 1),
@@ -51,25 +56,34 @@ public partial class LabTwo : Window
         Span<uint> span = new(pixels, HEIGHT * stride);
         span.Fill(0xFF000000);
 
-        RenderCube(pixels, stride);
+        // Z-buffering with float infinity
+        var zBuffer = new float[WIDTH * HEIGHT];
+        Array.Fill(zBuffer, float.PositiveInfinity);
+
+        RenderCube(pixels, stride, zBuffer);
         MainImage.InvalidateVisual();
         DebugLabel.Text = $"Angle: {angle:F2}";
     }
 
-    private unsafe void RenderCube(uint* pixels, int stride)
+    private unsafe void RenderCube(uint* pixels, int stride, float[] zBuffer)
     {
         angle += 0.02f; // Speed
         var MVP = CreateMVPMatrix(angle);
+        var M = CreateMMatrix(angle);
+
+        var angle2 = (float)(angle * 0.02);
+        var MVP2 = CreateMVPMatrix(angle2);
+        var M2 = CreateMMatrix(angle2);
 
         cube.Tris.ForEach(tri =>
         {
-            var v1 = Project(VertexShader(cube.Vertices[tri.A], MVP));
-            var v2 = Project(VertexShader(cube.Vertices[tri.B], MVP));
-            var v3 = Project(VertexShader(cube.Vertices[tri.C], MVP));
+            var A = Project(VertexShader(cube.Vertices[tri.A], MVP, M));
+            var B = Project(VertexShader(cube.Vertices[tri.B], MVP, M));
+            var C = Project(VertexShader(cube.Vertices[tri.C], MVP, M));
 
-            var p1 = ConvertToPixels(v1.Position);
-            var p2 = ConvertToPixels(v2.Position);
-            var p3 = ConvertToPixels(v3.Position);
+            var p1 = ConvertToPixels(A.Position);
+            var p2 = ConvertToPixels(B.Position);
+            var p3 = ConvertToPixels(C.Position);
 
             var face = Vector3.Cross(
               new Vector3(p1.X - p2.X, p1.Y - p2.Y, 0),
@@ -84,23 +98,28 @@ public partial class LabTwo : Window
             {
                 for (int x = (int)min.X; x <= (int)max.X; x++)
                 {
+                    // Check if pixel is in triangle
                     var uv = TriangleIntersection(p1, p2, p3, new Vector2(x, y));
                     if (!IsPointInTriangle(uv, new Vector2(x, y)))
                         continue;
-                    // Use barycentric weights to interpolate vertex colors: A*(1-u-v) + B*u + C*v
-                    var color = Vector3.Lerp(
-                        cube.Vertices[tri.A].Color,
-                        Vector3.One,
-                        uv.X);
-                    pixels[y * stride + x] = Color.Vector3ToPixel(color);
+                    var Q = A + uv.X * (B - A) + uv.Y * (C - A);
+                    // Transform vertex Q back to camera space
+                    var zFar = 100f;
+                    var zNear = 0.1f;
+                    var z = zFar * zNear / zFar + (zFar - zNear) * Q.Position.Z;
+                    var Q2 = FragmentShader(Q * z);
+                    pixels[y * stride + x] = Color.Vector3ToPixel(Q2);
                 }
             }
         });
     }
 
-    private static Vector3 VertexShader()
+    private Vector3 FragmentShader(Vertex Q)
     {
-        return Vector3.Zero;
+        var cos0 = (float)Vector3.Dot(Q.Normal, Vector3.Normalize(light.position - Q.Position.AsVector3()));
+        if (cos0 < 0)
+            return Vector3.Zero;
+        return light.color * Q.Color * cos0;
     }
 
 
@@ -133,11 +152,16 @@ public partial class LabTwo : Window
         return 1 / v.Position.W * v;
     }
 
-    private static Vertex VertexShader(Vertex v, Matrix4x4 mvp)
+    private static Vertex VertexShader(Vertex v, Matrix4x4 mvp, Matrix4x4 M)
     {
+        var det = M.GetDeterminant();
+        Matrix4x4.Invert(M, out var invM);
         return v with
         {
-            Position = Vector4.Transform(v.Position, mvp)
+            Position = Vector4.Transform(v.Position, mvp),
+            Normal = Vector3.TransformNormal(v.Normal, invM) * det,
+            // Remove homogenization
+            WorldCoordinates = Vector4.Transform(v.Position, M).AsVector3(),
         };
     }
 
@@ -151,11 +175,16 @@ public partial class LabTwo : Window
         );
     }
 
-    private static Matrix4x4 CreateMVPMatrix(float angle)
+    private static Matrix4x4 CreateMMatrix(float angle)
     {
         var M = Matrix4x4.CreateRotationY(angle);
         M *= Matrix4x4.CreateRotationX(angle / 2);
+        return M;
+    }
 
+    private static Matrix4x4 CreateMVPMatrix(float angle)
+    {
+        var M = CreateMMatrix(angle);
         var V = Matrix4x4.CreateLookAt(
             new(0, 0, -10),
             Vector3.Zero,

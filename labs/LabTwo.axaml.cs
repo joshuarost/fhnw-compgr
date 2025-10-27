@@ -6,7 +6,6 @@ using utils;
 using System.Numerics;
 using Avalonia.Media.Imaging;
 using Avalonia.Platform;
-using System.Collections.Generic;
 
 namespace fhnw_compgr.labs;
 
@@ -116,7 +115,10 @@ public partial class LabTwo : Window
 
     private Vector3 FragmentShader(Vertex Q)
     {
-        var cos0 = (float)Vector3.Dot(Q.Normal, Vector3.Normalize(light.position - Q.Position.AsVector3()));
+        var cos0 = (float)Vector3.Dot(
+            Q.Normal,
+            Vector3.Normalize(light.position - Q.WorldCoordinates)
+        );
         if (cos0 < 0)
             return Vector3.Zero;
         return light.color * Q.Color * cos0;

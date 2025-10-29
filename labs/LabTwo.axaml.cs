@@ -15,17 +15,19 @@ public partial class LabTwo : Window
     private readonly DispatcherTimer timer = new();
     private float angle = 0;
     private readonly WriteableBitmap framebuffer;
+    private readonly Vector3 eye = new(0, 0, -10);
     private readonly Light light = new(
-        new Vector3(5, 5, -5),
-        new Vector3(1, 1, 1)
+        // Top of screen
+        new Vector3(0, 5, 0),
+        new Vector3(0.5f, 0.5f, 0.5f)
     );
     private readonly Mesh cube = Mesh.CreateCube(
             new Vector3(1, 0, 0),
-            new Vector3(0, 1, 1),
-            new Vector3(1, 0, 1),
-            new Vector3(1, 1, 0),
-            new Vector3(1, 1, 1),
-            new Vector3(0, 1, 1)
+            new Vector3(1, 0, 0),
+            new Vector3(1, 0, 0),
+            new Vector3(1, 0, 0),
+            new Vector3(1, 0, 0),
+            new Vector3(1, 0, 0)
         );
 
     public LabTwo()
@@ -66,7 +68,7 @@ public partial class LabTwo : Window
 
     private unsafe void RenderCube(uint* pixels, int stride, float[] zBuffer)
     {
-        angle += 0.02f; // Speed
+        angle += 0.05f; // Speed
         var MVP = CreateMVPMatrix(angle);
         var M = CreateMMatrix(angle);
 
@@ -106,23 +108,32 @@ public partial class LabTwo : Window
                     var zFar = 100f;
                     var zNear = 0.1f;
                     var z = zFar * zNear / zFar + (zFar - zNear) * Q.Position.Z;
-                    var Q2 = FragmentShader(Q * z);
+                    var Q2 = FragmentShaderDiffuse(Q * z);
                     pixels[y * stride + x] = Color.Vector3ToPixel(Q2);
                 }
             }
         });
     }
 
-    private Vector3 FragmentShader(Vertex Q)
+    private Vector3 FragmentShaderDiffuse(Vertex Q)
     {
-        var cos0 = (float)Vector3.Dot(
-            Q.Normal,
-            Vector3.Normalize(light.position - Q.WorldCoordinates)
-        );
+        var PL = Vector3.Normalize(Q.WorldCoordinates - light.position);
+        var cos0 = MathF.Max(0, Vector3.Dot(-Q.Normal, PL)); // flip normal
         if (cos0 < 0)
             return Vector3.Zero;
-        return light.color * Q.Color * cos0;
+        if (Q.TexCoord == Vector2.Zero)
+            return light.color * Q.Color * cos0;
+        // Specular texture
+        var r = 2 * (cos0 * Q.Normal) * Q.Normal - PL;
+        var EP = Vector3.Normalize(eye - Q.WorldCoordinates);
+        var cosF = Vector3.Dot(Vector3.Normalize(r), EP);
+        if (cosF < 0)
+            return light.color * Q.Color * cos0;
+        var k = 10f;
+        var spec = MathF.Pow(cosF, k);
+        return light.color * (Q.Color * cos0 + new Vector3(spec, spec, spec));
     }
+
 
 
     private static (Vector2 x, Vector2 y) BoundingBox(Vector2 a, Vector2 b, Vector2 c)
@@ -156,13 +167,13 @@ public partial class LabTwo : Window
 
     private static Vertex VertexShader(Vertex v, Matrix4x4 mvp, Matrix4x4 M)
     {
-        var det = M.GetDeterminant();
         Matrix4x4.Invert(M, out var invM);
+        var normalMatrix = Matrix4x4.Transpose(invM);
+
         return v with
         {
             Position = Vector4.Transform(v.Position, mvp),
-            Normal = Vector3.TransformNormal(v.Normal, invM) * det,
-            // Remove homogenization
+            Normal = Vector3.Normalize(Vector3.TransformNormal(v.Normal, normalMatrix)),
             WorldCoordinates = Vector4.Transform(v.Position, M).AsVector3(),
         };
     }

@@ -68,11 +68,12 @@ public class RenderContext
                 // Transform vertex Q back to camera space
                 var zFar = 100f;
                 var zNear = 0.1f;
-                var z = zFar * zNear / zFar + (zFar - zNear) * Q.Position.Z;
+                // var z = zFar * zNear / zFar + (zFar - zNear) * Q.Position.Z;
+                var z = Q.Position.Z;
                 if (zBuffer[y * WIDTH + x] < z)
                     continue;
                 zBuffer[y * WIDTH + x] = z;
-                var Q2 = FragmentShaderDiffuse(Q * z);
+                var Q2 = FragmentShader(Q);
                 pixels[y * stride + x] = Color.Vector3ToPixel(Q2);
             }
         }
@@ -112,22 +113,24 @@ public class RenderContext
         return uv.X >= 0 && uv.Y >= 0 && (uv.X + uv.Y) < 1;
     }
 
-    private Vector3 FragmentShaderDiffuse(Vertex Q)
+    private Vector3 FragmentShader(Vertex Q)
     {
-        var PL = Vector3.Normalize(Q.WorldCoordinates - light.position);
-        var cos0 = MathF.Max(0, Vector3.Dot(-Q.Normal, PL)); // flip normal
-        if (cos0 < 0)
-            return Vector3.Zero;
-        if (Q.TexCoord == Vector2.Zero)
-            return light.color * Q.Color * cos0;
-        // Specular texture
-        var r = 2 * (cos0 * Q.Normal) * Q.Normal - PL;
+        var N = Vector3.Normalize(-Q.Normal);
+        // return new Vector3(Math.Abs(N.X), Math.Abs(N.Y), Math.Abs(N.Z));
+        var PL = Vector3.Normalize(light.position - Q.WorldCoordinates);
         var EP = Vector3.Normalize(eye - Q.WorldCoordinates);
-        var cosF = Vector3.Dot(Vector3.Normalize(r), EP);
-        if (cosF < 0)
-            return light.color * Q.Color * cos0;
+
+        var cos0 = MathF.Max(0, Vector3.Dot(N, PL)); // flip normal
+
+        var diffuse = light.color * Q.Color * cos0;
+
+        // LOOK UP TEXTURE COORDINATES
+
+        var R = Vector3.Normalize(2 * cos0 * N - PL);
+        var cosF = MathF.Max(0, Vector3.Dot(R, EP));
+
         var k = 10f;
         var spec = MathF.Pow(cosF, k);
-        return light.color * (Q.Color * cos0 + new Vector3(spec, spec, spec));
+        return diffuse + light.color * spec;
     }
 }

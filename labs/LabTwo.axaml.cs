@@ -55,8 +55,8 @@ public partial class LabTwo : Window
         var M = CreateModelMatrix(angle);
         var MVP = CreateMVPMatrix(angle);
         var root = new Node { Mesh = cube };
-        root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(1, 1, 1)));
-        root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(-1, -1, 1)));
+        // root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(1, 1, 1)));
+        // root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(-1, -1, 1)));
         root.Render(M, MVP, ctx);
 
         MainImage.InvalidateVisual();

@@ -172,7 +172,7 @@ public partial class LabOne : Window
         if (sphere.texture != null)
         {
             var uv = PlanarProjection(hitpoint.Value.Normal, scale: 0.4f);
-            var texture = GetTexture(sphere.texture, uv);
+            var texture = Texture.GetTexture(sphere.texture, uv);
             sphere.diffuse = texture;
         }
 
@@ -233,33 +233,6 @@ public partial class LabOne : Window
         if (v < 0) v += 1f;
         return new Vector2(u, v);
     }
-
-    unsafe static Vector3 GetTexture(Bitmap texture, Vector2 uv)
-    {
-        uv.X -= MathF.Floor(uv.X);
-        uv.Y -= MathF.Floor(uv.Y);
-
-        int w = (int)texture.Size.Width;
-        int h = (int)texture.Size.Height;
-
-        int x = (int)(uv.X * (w - 1));
-        int y = (int)((1f - uv.Y) * (h - 1));
-
-        byte[] buffer = new byte[4]; // Avalonia uses RGBA
-        fixed (byte* p = buffer)
-        {
-            var rect = new PixelRect(x, y, 1, 1);
-            int bufferSize = buffer.Length;   // 4
-            int stride = 4;                   // 1 pixel * 4 bytes
-            texture.CopyPixels(rect, (nint)p, bufferSize, stride);
-        }
-
-        float r = buffer[0] / 255f;
-        float g = buffer[1] / 255f;
-        float b = buffer[2] / 255f;
-        return Color.SRGBToLinear(new Vector3(r, g, b));
-    }
-
 
     unsafe void Lab1(ILockedFramebuffer framebuffer)
     {

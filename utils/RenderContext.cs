@@ -1,5 +1,7 @@
 using System;
 using System.Numerics;
+using Avalonia.Media.Imaging;
+using Avalonia.Platform;
 
 namespace utils;
 
@@ -9,6 +11,7 @@ public class RenderContext
     public float[] zBuffer;
     public int stride;
     public unsafe uint* pixels;
+    private readonly Bitmap texture = new(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/brick.jpg")));
 
     public readonly Light light = new(
         // Top of screen
@@ -56,23 +59,56 @@ public class RenderContext
         int y0 = Math.Max(0, (int)MathF.Floor(min.Y));
         int x1 = Math.Min(WIDTH - 1, (int)MathF.Ceiling(max.X));
         int y1 = Math.Min(HEIGHT - 1, (int)MathF.Ceiling(max.Y));
+
+        // Perspective-correct depth setup
+        // Define your near and far plane values (adjust as needed)
+        float zNear = 0.1f;
+        float zFar = 100f;
+
+        float wA = A.Position.W;
+        float wB = B.Position.W;
+        float wC = C.Position.W;
+
+        float zA = A.Position.Z;
+        float zB = B.Position.Z;
+        float zC = C.Position.Z;
+
+        float zPrimeA = zFar * zNear / (zFar + zNear - zFar * zA);
+        float zPrimeB = zFar * zNear / (zFar + zNear - zFar * zB);
+        float zPrimeC = zFar * zNear / (zFar + zNear - zFar * zC);
+
+        float invWA = 1f / wA;
+        float invWB = 1f / wB;
+        float invWC = 1f / wC;
+
         for (int y = y0; y <= y1; y++)
         {
             for (int x = x0; x <= x1; x++)
             {
-                // Check if pixel is in triangle
-                var uv = TriangleIntersection(p1, p2, p3, new Vector2(x, y));
-                if (!IsPointInTriangle(uv, new Vector2(x, y)))
+                // Barycentric coordinates
+                var bary = TriangleIntersection(p1, p2, p3, new Vector2(x, y));
+                if (!IsPointInTriangle(bary, new Vector2(x, y)))
                     continue;
 
-                var Q = A + uv.X * (B - A) + uv.Y * (C - A);
+                // Interpolate vertex attributes
+                var a = 1 - bary.X - bary.Y;
+                var b = bary.X;
+                var c = bary.Y;
 
-                var z = Q.Position.Z;
-                if (zBuffer[y * WIDTH + x] < z)
+                var Q = A + b * (B - A) + c * (C - A); // Interpolated vertex
+
+                // Perspective-correct depth interpolation
+                float zPrimeOverW = a * (zPrimeA * invWA) + b * (zPrimeB * invWB) + c * (zPrimeC * invWC);
+                float oneOverW = a * invWA + b * invWB + c * invWC;
+                float zPrime = zPrimeOverW / oneOverW;
+
+                // Depth test with zPrime
+                if (zBuffer[y * WIDTH + x] < zPrime)
                     continue;
-                zBuffer[y * WIDTH + x] = z;
-                var Q2 = FragmentShader(Q);
-                pixels[y * stride + x] = Color.Vector3ToPixel(Q2);
+                zBuffer[y * WIDTH + x] = zPrime;
+
+                var color = FragmentShader(Q);
+                pixels[y * stride + x] = Color.Vector3ToPixel(color);
             }
         }
     }
@@ -124,8 +160,9 @@ public class RenderContext
             return Q.Color;
 
         var diffuse = light.color * Q.Color * cos0;
-
-        // LOOK UP TEXTURE COORDINATES
+        // var texColor = Texture.GetTexture(texture, Q.TexCoord);
+        var texColor = Texture.BilinearSample(texture, Q.TexCoord);
+        diffuse *= texColor;
 
         var R = Vector3.Normalize(2 * cos0 * N - PL);
         var cosF = MathF.Max(0, Vector3.Dot(R, EP));

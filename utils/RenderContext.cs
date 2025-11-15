@@ -12,7 +12,7 @@ public class RenderContext
 
     public readonly Light light = new(
         // Top of screen
-        new Vector3(0, 5, 0),
+        new Vector3(0, 1, 0),
         new Vector3(0.5f, 0.5f, 0.5f)
     );
 
@@ -64,11 +64,9 @@ public class RenderContext
                 var uv = TriangleIntersection(p1, p2, p3, new Vector2(x, y));
                 if (!IsPointInTriangle(uv, new Vector2(x, y)))
                     continue;
+
                 var Q = A + uv.X * (B - A) + uv.Y * (C - A);
-                // Transform vertex Q back to camera space
-                var zFar = 100f;
-                var zNear = 0.1f;
-                // var z = zFar * zNear / zFar + (zFar - zNear) * Q.Position.Z;
+
                 var z = Q.Position.Z;
                 if (zBuffer[y * WIDTH + x] < z)
                     continue;
@@ -116,11 +114,14 @@ public class RenderContext
     private Vector3 FragmentShader(Vertex Q)
     {
         var N = Vector3.Normalize(-Q.Normal);
-        // return new Vector3(Math.Abs(N.X), Math.Abs(N.Y), Math.Abs(N.Z));
+        // return N;
         var PL = Vector3.Normalize(light.position - Q.WorldCoordinates);
         var EP = Vector3.Normalize(eye - Q.WorldCoordinates);
 
         var cos0 = MathF.Max(0, Vector3.Dot(N, PL)); // flip normal
+
+        if (cos0 <= 0)
+            return Q.Color;
 
         var diffuse = light.color * Q.Color * cos0;
 
@@ -128,6 +129,9 @@ public class RenderContext
 
         var R = Vector3.Normalize(2 * cos0 * N - PL);
         var cosF = MathF.Max(0, Vector3.Dot(R, EP));
+
+        if (cosF <= 0)
+            return diffuse;
 
         var k = 10f;
         var spec = MathF.Pow(cosF, k);

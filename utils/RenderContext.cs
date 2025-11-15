@@ -45,6 +45,7 @@ public class RenderContext
         var p2 = ConvertToPixels(B.Position);
         var p3 = ConvertToPixels(C.Position);
 
+        // Back-face culling
         var face = Vector3.Cross(
           new Vector3(p1.X - p2.X, p1.Y - p2.Y, 0),
           new Vector3(p3.X - p1.X, p3.Y - p1.Y, 0)

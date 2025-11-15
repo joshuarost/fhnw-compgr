@@ -19,11 +19,11 @@ public partial class LabTwo : Window
 
     private readonly Mesh cube = Mesh.CreateCube(
             new Vector3(1, 0, 0),
-            new Vector3(1, 0, 0),
-            new Vector3(1, 0, 0),
-            new Vector3(1, 0, 0),
-            new Vector3(1, 0, 0),
-            new Vector3(1, 0, 0)
+            new Vector3(1, 1, 0),
+            new Vector3(1, 0, 1),
+            new Vector3(1, 0.5f, 1),
+            new Vector3(1, 0, 0.5f),
+            new Vector3(1, 0.4f, 0.9f)
         );
     private readonly Mesh sphere = Mesh.CreateSphere(16, new Vector3(0, 0, 1));
 

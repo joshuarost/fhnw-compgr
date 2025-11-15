@@ -11,7 +11,6 @@ public class RenderContext
     public float[] zBuffer;
     public int stride;
     public unsafe uint* pixels;
-    private readonly Bitmap texture = new(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/brick.jpg")));
 
     public readonly Light light = new(
         // Top of screen
@@ -40,7 +39,7 @@ public class RenderContext
         Array.Fill(zBuffer, float.PositiveInfinity);
     }
 
-    public unsafe void Rasterize(Vertex A, Vertex B, Vertex C)
+    public unsafe void Rasterize(Vertex A, Vertex B, Vertex C, Bitmap? Texture)
     {
         var p1 = ConvertToPixels(A.Position);
         var p2 = ConvertToPixels(B.Position);
@@ -107,7 +106,7 @@ public class RenderContext
                     continue;
                 zBuffer[y * WIDTH + x] = zPrime;
 
-                var color = FragmentShader(Q);
+                var color = FragmentShader(Q, Texture);
                 pixels[y * stride + x] = Color.Vector3ToPixel(color);
             }
         }
@@ -147,7 +146,7 @@ public class RenderContext
         return uv.X >= 0 && uv.Y >= 0 && (uv.X + uv.Y) < 1;
     }
 
-    private Vector3 FragmentShader(Vertex Q)
+    private Vector3 FragmentShader(Vertex Q, Bitmap? tex)
     {
         var N = Vector3.Normalize(-Q.Normal);
         // return N;
@@ -160,9 +159,12 @@ public class RenderContext
             return Q.Color;
 
         var diffuse = light.color * Q.Color * cos0;
-        // var texColor = Texture.GetTexture(texture, Q.TexCoord);
-        var texColor = Texture.BilinearSample(texture, Q.TexCoord);
-        diffuse *= texColor;
+
+        if (tex != null)
+        {
+            var texColor = Texture.BilinearSample(tex, Q.TexCoord);
+            diffuse *= texColor;
+        }
 
         var R = Vector3.Normalize(2 * cos0 * N - PL);
         var cosF = MathF.Max(0, Vector3.Dot(R, EP));

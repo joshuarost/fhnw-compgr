@@ -2,12 +2,14 @@
 using System;
 using System.Collections.Generic;
 using System.Numerics;
+using Avalonia.Media.Imaging;
 
 namespace utils;
 
 public class Node()
 {
     public Mesh? Mesh { get; set; }
+    public Bitmap? Texture { get; set; }
     public List<(Node Node, Matrix4x4 Transform)> Children { get; } = [];
 
     public void Render(Matrix4x4 parentModel, Matrix4x4 viewProjection, RenderContext ctx)
@@ -37,7 +39,7 @@ public class Node()
         }
     }
 
-    private static void RenderTriangles(
+    private void RenderTriangles(
         Vertex[] vertices,
         (int A, int B, int C)[] tris,
         Matrix4x4 mvp,
@@ -50,7 +52,7 @@ public class Node()
             var A = Project(VertexShader(vertices[tri.A], mvp, normalMatrix));
             var B = Project(VertexShader(vertices[tri.B], mvp, normalMatrix));
             var C = Project(VertexShader(vertices[tri.C], mvp, normalMatrix));
-            ctx.Rasterize(A, B, C);
+            ctx.Rasterize(A, B, C, Texture);
         }
     }
 

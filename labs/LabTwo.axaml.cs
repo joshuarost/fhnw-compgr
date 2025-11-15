@@ -15,6 +15,8 @@ public partial class LabTwo : Window
     private readonly DispatcherTimer timer = new();
     private float angle = 0;
     private readonly WriteableBitmap framebuffer;
+    private readonly Bitmap texture = new(AssetLoader.Open(new Uri("avares://fhnw-compgr/Assets/brick.jpg")));
+
     private readonly Mesh cube = Mesh.CreateCube(
             new Vector3(1, 0, 0),
             new Vector3(1, 0, 0),
@@ -54,9 +56,8 @@ public partial class LabTwo : Window
         angle += 0.05f; // Speed
         var M = CreateModelMatrix(angle);
         var MVP = CreateMVPMatrix(angle);
-        var root = new Node { Mesh = cube };
-        // root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(1, 1, 1)));
-        // root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(-1, -1, 1)));
+        var root = new Node { Mesh = cube, Texture = texture };
+        root.Children.Add((new Node { Mesh = sphere }, Matrix4x4.CreateTranslation(1, 1, 1)));
         root.Render(M, MVP, ctx);
 
         MainImage.InvalidateVisual();
